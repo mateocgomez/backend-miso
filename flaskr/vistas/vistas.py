@@ -1,26 +1,37 @@
+from flaskr.modelos.modelos import Acceso
 from flask import request
-from ..modelos import db, Cancion, CancionSchema, Usuario, UsuarioSchema, Album, AlbumSchema
+from ..modelos import db, Cancion, CancionSchema, Usuario, UsuarioSchema, Album, AlbumSchema, AlbumPatchSchema, Comentario, ComentarioSchema
 from flask_restful import Resource
 from sqlalchemy.exc import IntegrityError
 from flask_jwt_extended import jwt_required, create_access_token, get_jwt_identity
+from sqlalchemy import or_
+from sqlalchemy.sql.expression import case
+from flask_apispec.views import MethodResource
+from flask_apispec import marshal_with, doc, use_kwargs
+from marshmallow import fields
+
 
 cancion_schema = CancionSchema()
 usuario_schema = UsuarioSchema()
 album_schema = AlbumSchema()
+comentario_schema = ComentarioSchema()
 
 
-class VistaCanciones(Resource):
-
+@doc(description='Crear y Leer canciones', tags=['Canciones'])
+class VistaCanciones(MethodResource, Resource):
+    @marshal_with(CancionSchema, code=201, description='Cancion creada')
     def post(self):
         nueva_cancion = Cancion(titulo=request.json["titulo"], minutos=request.json["minutos"], segundos=request.json["segundos"], interprete=request.json["interprete"])
         db.session.add(nueva_cancion)
         db.session.commit()
         return cancion_schema.dump(nueva_cancion)
 
+    @marshal_with(CancionSchema(many=True), code=200, description='Lista de canciones')
     def get(self):
         return [cancion_schema.dump(ca) for ca in Cancion.query.all()]
 
-class VistaCancion(Resource):
+@doc(description='Actualizar, Leer y Borrar cancion', tags=['Cancion'])
+class VistaCancion(MethodResource, Resource):
 
     def get(self, id_cancion):
         return cancion_schema.dump(Cancion.query.get_or_404(id_cancion))
@@ -40,12 +51,16 @@ class VistaCancion(Resource):
         db.session.commit()
         return '',204
 
-class VistaAlbumesCanciones(Resource):
+
+@doc(description='Leer los albumes de una cancion', tags=['AlbumesCanciones'])
+class VistaAlbumesCanciones(MethodResource, Resource):
     def get(self, id_cancion):
         cancion = Cancion.query.get_or_404(id_cancion)
         return [album_schema.dump(al) for al in cancion.albumes]
 
-class VistaSignIn(Resource):
+
+@doc(description='Crear nueva cuenta, cambiar contrasena y borrar cuenta', tags=['UsuarioManagement'])
+class VistaSignIn(MethodResource, Resource):
     
     def post(self):
         nuevo_usuario = Usuario(nombre=request.json["nombre"], contrasena=request.json["contrasena"])
@@ -67,7 +82,9 @@ class VistaSignIn(Resource):
         db.session.commit()
         return '',204
 
-class VistaLogIn(Resource):
+
+@doc(description='Iniciar sesion en Ionic', tags=['UsuarioLogin'])
+class VistaLogIn(MethodResource, Resource):
 
     def post(self):
         usuario = Usuario.query.filter(Usuario.nombre == request.json["nombre"], Usuario.contrasena == request.json["contrasena"]).first()
@@ -78,9 +95,12 @@ class VistaLogIn(Resource):
             token_de_acceso = create_access_token(identity = usuario.id)
             return {"mensaje":"Inicio de sesión exitoso", "token": token_de_acceso}
 
-class VistaAlbumsUsuario(Resource):
+
+@doc(description='Permite al usuario crear un album en su cuenta y tambien ver la lista de sus albumes y albumes publicos', tags=['AlbumUsuario'])
+class VistaAlbumsUsuario(MethodResource, Resource):
 
     @jwt_required()
+    @marshal_with(AlbumSchema(), code=200, description='Album creado')
     def post(self, id_usuario):
         nuevo_album = Album(titulo=request.json["titulo"], anio=request.json["anio"], descripcion=request.json["descripcion"], medio=request.json["medio"])
         usuario = Usuario.query.get_or_404(id_usuario)
@@ -95,11 +115,21 @@ class VistaAlbumsUsuario(Resource):
         return album_schema.dump(nuevo_album)
 
     @jwt_required()
+    @marshal_with(AlbumSchema(many=True), code=200, description='Lista de albumes')
     def get(self, id_usuario):
-        usuario = Usuario.query.get_or_404(id_usuario)
-        return [album_schema.dump(al) for al in usuario.albumes]
+        Usuario.query.get_or_404(id_usuario)
+        query = db.session.query(Album, case([(Album.usuario==id_usuario, True)], else_=False).label('pertenece'))\
+            .join(Usuario).filter(or_(Usuario.id == id_usuario, Album.acceso == Acceso.PUBLICO))
+        
+        def dump(album, pertenece):
+            album.pertenece = pertenece
+            serialized = album_schema.dump(album)
+            return serialized
+        return [dump(al, pertenece) for al, pertenece in query]
 
-class VistaCancionesAlbum(Resource):
+
+@doc(description='Leer las canciones de un album y asociar una cancion existente o nueva a un album', tags=['CancionesAlbum'])
+class VistaCancionesAlbum(MethodResource, Resource):
 
     def post(self, id_album):
         album = Album.query.get_or_404(id_album)
@@ -122,7 +152,9 @@ class VistaCancionesAlbum(Resource):
         album = Album.query.get_or_404(id_album)
         return [cancion_schema.dump(ca) for ca in album.canciones]
 
-class VistaAlbum(Resource):
+
+@doc(description='Actualizar, Leer y Borrar album', tags=['Album'])
+class VistaAlbum(MethodResource, Resource):
 
     def get(self, id_album):
         return album_schema.dump(Album.query.get_or_404(id_album))
@@ -135,10 +167,63 @@ class VistaAlbum(Resource):
         album.medio = request.json.get("medio", album.medio)
         db.session.commit()
         return album_schema.dump(album)
-
+    
+    @jwt_required()
     def delete(self, id_album):
         album = Album.query.get_or_404(id_album)
         db.session.delete(album)
         db.session.commit()
         return '',204
 
+    @doc(description='Permite cambiar el tipo de acceso a un album existente', tags=['Album'])
+    @marshal_with(AlbumPatchSchema, code=204, description='Se actualizo correctamente')
+    @marshal_with(AlbumPatchSchema, code=404, description='Album no existe')
+    @marshal_with(AlbumPatchSchema, code=401, description='Usuario no autenticado')
+    @jwt_required()
+    def patch(self, id_album):
+        album = Album.query.get_or_404(id_album)
+        id_usuario = get_jwt_identity()
+
+        if album.usuario != id_usuario:
+            return {"usuario": "No puede cambiar el acceso del album."}, 400
+        
+        album.acceso = request.json.get("acceso", album.acceso)
+        db.session.commit()
+        return '',204
+
+
+@doc(description='Permite al usuario crear un comentario para album', tags=['AlbumUsuario'])
+class VistaComentarioAlbumUsuario(MethodResource, Resource):
+    
+    @jwt_required()
+    def post(self, id_album):
+        album = Album.query.get_or_404(id_album)
+        usuario = get_jwt_identity()
+
+        if album.acceso != Acceso.PUBLICO:
+            return {"usuario": "El album no es publico. No puede agregar comentarios"}, 400
+
+        comentario = Comentario(texto=request.json["texto"], usuario=usuario)
+        album.comentarios.append(comentario)
+        db.session.commit()
+        return comentario_schema.dump(comentario)
+    
+    @jwt_required()
+    def get(self, id_album):
+        album = Album.query.get_or_404(id_album)
+
+        if album.acceso != Acceso.PUBLICO:
+            return {"usuario": "El album no es publico. No puede ver los comentarios"}, 400
+
+        query = db.session.query(Comentario, Usuario).\
+            join(Usuario).\
+            join(Comentario.albumes).\
+            filter(Album.acceso == Acceso.PUBLICO).\
+            filter(Album.id == id_album)
+
+        def dump(comentario, usuario):
+            comentario.usuario = usuario.nombre
+            serialized = comentario_schema.dump(comentario)
+            return serialized
+
+        return [dump(comentario, usuario) for comentario, usuario in query]
