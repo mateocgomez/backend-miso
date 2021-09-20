@@ -50,6 +50,33 @@ class VistaCancion(MethodResource, Resource):
         db.session.delete(cancion)
         db.session.commit()
         return '',204
+        
+    @jwt_required()
+    def patch(self, id_cancion):
+        cancion = Cancion.query.get_or_404(id_cancion)
+
+        id_usuario = get_jwt_identity()
+
+        belongAlbums = cancion.albumes
+        
+        if belongAlbums:
+            isOwner = False
+
+            for album in belongAlbums:
+                if album.usuario == id_usuario:
+                    isOwner = True       
+
+            if not isOwner:
+                return {"mensaje": "No puede cambiar el acceso de la cancíón."}, 400
+
+        acceso = request.json.get("acceso")
+
+        if not acceso in Acceso._member_names_:
+            return { "mensajes": "{} no es parte de los valores disponibles de Acceso".format(acceso) }, 400
+
+        cancion.acceso = acceso
+        db.session.commit()
+        return '',204
 
 
 @doc(description='Leer los albumes de una cancion', tags=['AlbumesCanciones'])
@@ -220,6 +247,43 @@ class VistaComentarioAlbumUsuario(MethodResource, Resource):
             join(Comentario.albumes).\
             filter(Album.acceso == Acceso.PUBLICO).\
             filter(Album.id == id_album)
+
+        def dump(comentario, usuario):
+            comentario.usuario = usuario.nombre
+            serialized = comentario_schema.dump(comentario)
+            return serialized
+
+        return [dump(comentario, usuario) for comentario, usuario in query]
+
+
+@doc(description='Permite al usuario crear un comentario para cancion', tags=['CancionUsuario'])
+class VistaComentarioCancionUsuario(MethodResource, Resource):
+    
+    @jwt_required()
+    def post(self, id_cancion):
+        cancion = Cancion.query.get_or_404(id_cancion)
+        usuario = get_jwt_identity()
+
+        if cancion.acceso != Acceso.PUBLICO:
+            return {"usuario": "La canción no es pública. No puede agregar comentarios"}, 400
+
+        comentario = Comentario(texto=request.json["texto"], usuario=usuario)
+        cancion.comentarios.append(comentario)
+        db.session.commit()
+        return comentario_schema.dump(comentario)
+    
+    @jwt_required()
+    def get(self, id_cancion):
+        cancion = Cancion.query.get_or_404(id_cancion)
+
+        if cancion.acceso != Acceso.PUBLICO:
+            return {"usuario": "La canción no es pública. No puede ver los comentarios"}, 400
+
+        query = db.session.query(Comentario, Usuario).\
+            join(Usuario).\
+            join(Comentario.canciones).\
+            filter(Cancion.acceso == Acceso.PUBLICO).\
+            filter(Cancion.id == id_cancion)
 
         def dump(comentario, usuario):
             comentario.usuario = usuario.nombre

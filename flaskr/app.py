@@ -1,7 +1,7 @@
 from flaskr import create_app
 from flask_restful import Api
 from .modelos import db
-from .vistas import VistaCanciones, VistaCancion, VistaSignIn, VistaAlbum, VistaAlbumsUsuario, VistaCancionesAlbum, VistaLogIn, VistaAlbumesCanciones, VistaComentarioAlbumUsuario
+from .vistas import VistaCanciones, VistaCancion, VistaSignIn, VistaAlbum, VistaAlbumsUsuario, VistaCancionesAlbum, VistaLogIn, VistaAlbumesCanciones, VistaComentarioAlbumUsuario, VistaComentarioCancionUsuario
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS, cross_origin
 from apispec import APISpec
@@ -52,6 +52,8 @@ api.add_resource(VistaAlbumsUsuario, '/usuario/<int:id_usuario>/albumes')
 api.add_resource(VistaAlbum, '/album/<int:id_album>')
 api.add_resource(VistaCancionesAlbum, '/album/<int:id_album>/canciones')
 api.add_resource(VistaComentarioAlbumUsuario, '/album/<int:id_album>/comentarios')
+api.add_resource(VistaComentarioCancionUsuario, '/cancion/<int:id_cancion>/comentarios')
+
 
 jwt = JWTManager(app)
 
@@ -79,3 +81,4 @@ docs.register(VistaAlbumsUsuario)
 docs.register(VistaAlbum)
 docs.register(VistaCancionesAlbum)
 docs.register(VistaComentarioAlbumUsuario)
+docs.register(VistaComentarioCancionUsuario)
