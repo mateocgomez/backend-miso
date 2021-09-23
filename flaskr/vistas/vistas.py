@@ -19,16 +19,36 @@ comentario_schema = ComentarioSchema()
 
 @doc(description='Crear y Leer canciones', tags=['Canciones'])
 class VistaCanciones(MethodResource, Resource):
+    @jwt_required()
     @marshal_with(CancionSchema, code=201, description='Cancion creada')
     def post(self):
         nueva_cancion = Cancion(titulo=request.json["titulo"], minutos=request.json["minutos"], segundos=request.json["segundos"], interprete=request.json["interprete"])
-        db.session.add(nueva_cancion)
-        db.session.commit()
+        id_usuario = get_jwt_identity()
+        usuario = Usuario.query.get_or_404(id_usuario)
+        usuario.canciones.append(nueva_cancion)
+
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            return 'El usuario ya tiene una canción con dicho nombre',409
+
         return cancion_schema.dump(nueva_cancion)
 
+    @jwt_required()
     @marshal_with(CancionSchema(many=True), code=200, description='Lista de canciones')
-    def get(self):
-        return [cancion_schema.dump(ca) for ca in Cancion.query.all()]
+    def get(self):                        
+        id_usuario = get_jwt_identity()
+        Usuario.query.get_or_404(id_usuario)
+        query = db.session.query(Cancion, case([(Cancion.usuario==id_usuario, True)], else_=False).label('pertenece'))\
+            .join(Usuario).filter(or_(Usuario.id == id_usuario, Cancion.acceso == Acceso.PUBLICO))
+
+        def dump(cancion, pertenece):
+            cancion.pertenece = pertenece
+            serialized = cancion_schema.dump(cancion)
+            return serialized
+        
+        return [dump(canc, pertenece) for canc, pertenece in query]
 
 @doc(description='Actualizar, Leer y Borrar cancion', tags=['Cancion'])
 class VistaCancion(MethodResource, Resource):

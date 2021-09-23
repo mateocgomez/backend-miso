@@ -82,3 +82,81 @@ class TestCancion(BaseCase):
     # Assert    
     self.assertEqual(response.status_code, 400)
 
+  def test_create_canciones_and_list_mine(self):
+    
+    # Arrange
+    user1 = UsuarioFixture().create()
+
+    cancion_data_1 = {
+        'titulo': 'test cancion 1',
+        'minutos': 3,
+        'segundos': 45,
+        'interprete': 'test interprete 1'
+    }
+
+    cancion_data_2 = {
+        'titulo': 'test cancion 2',
+        'minutos': 4,
+        'segundos': 32,
+        'interprete': 'test interprete 2'
+    }
+
+    user2 = UsuarioFixture().create()
+    cancion_data_3 = {
+        'titulo': 'test cancion 3',
+        'minutos': 2,
+        'segundos': 28,
+        'interprete': 'test interprete 3'
+    }
+    
+    # Act  
+    crear_cancion_response_1 = self.run_authenticated(user1, 'post', f'/canciones', data=json.dumps(cancion_data_1))       
+    crear_cancion_response_2 = self.run_authenticated(user1, 'post', f'/canciones', data=json.dumps(cancion_data_2))       
+    crear_cancion_response_3 = self.run_authenticated(user2, 'post', f'/canciones', data=json.dumps(cancion_data_3))       
+    
+    list_canciones_response = self.run_authenticated(user1, 'get', f'/canciones')       
+    list_canciones = list_canciones_response.json
+
+    # Assert    
+    self.assertEqual(crear_cancion_response_1.status_code, 200)  
+    self.assertEqual(crear_cancion_response_2.status_code, 200)  
+    self.assertEqual(crear_cancion_response_3.status_code, 200)  
+    self.assertEqual(list_canciones_response.status_code, 200)     
+    self.assertEqual(len(list_canciones), 2) 
+
+  def test_list_canciones_exists_pertenece_field(self):
+
+    # Arrange
+    user = UsuarioFixture().create()
+
+    cancion_data = {
+        'titulo': 'test cancion 1',
+        'minutos': 3,
+        'segundos': 45,
+        'interprete': 'test interprete 1'
+    }
+    
+    # Act  
+    crear_cancion_response = self.run_authenticated(user, 'post', f'/canciones', data=json.dumps(cancion_data))           
+    list_canciones_response = self.run_authenticated(user, 'get', f'/canciones')       
+    list_canciones = list_canciones_response.json
+
+    # Assert    
+    self.assertEqual(crear_cancion_response.status_code, 200)    
+    self.assertEqual(list_canciones_response.status_code, 200)     
+    self.assertTrue(all("pertenece" in cancion for cancion in list_canciones))  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

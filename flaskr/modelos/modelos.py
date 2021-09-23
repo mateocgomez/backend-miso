@@ -70,6 +70,7 @@ class Usuario(db.Model):
     contrasena = db.Column(db.String(50))
     albumes = db.relationship('Album', cascade='all, delete, delete-orphan')
     comentarios = db.relationship('Comentario', cascade='all, delete, delete-orphan')
+    canciones = db.relationship('Cancion', cascade='all, delete, delete-orphan')
 
 
 class EnumADiccionario(fields.Field):
@@ -82,6 +83,7 @@ class EnumADiccionario(fields.Field):
 
 class CancionSchema(SQLAlchemyAutoSchema):
     acceso = EnumADiccionario(attribute=("acceso"))
+    pertenece = fields.Boolean()
         
     class Meta:
          model = Cancion
