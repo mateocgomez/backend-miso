@@ -1,6 +1,7 @@
 import json
 from flaskr.tests.fixtures.user_fixtures import UsuarioFixture
 from flaskr.tests import BaseCase, fixtures
+from flaskr.modelos import Acceso, Medio
 
 class TestCancion(BaseCase):
 
@@ -145,6 +146,48 @@ class TestCancion(BaseCase):
     self.assertEqual(list_canciones_response.status_code, 200)     
     self.assertTrue(all("pertenece" in cancion for cancion in list_canciones))  
 
+
+  def test_endpoint_patch_change_acceso_cancion_success(self):
+
+    # Arrange
+
+    # Crear usuario
+    user = UsuarioFixture().create()
+
+    # Crear canción
+    cancion_data = {
+        'titulo': 'test cancion 1',
+        'minutos': 1,
+        'segundos': 1,
+        'interprete': 'test interprete 1'
+    }
+    
+    crear_cancion_response = self.run_authenticated(user, 'post', f'/canciones', data=json.dumps(cancion_data))       
+    cancion = crear_cancion_response.json
+
+    # Crear album
+    album_data = {
+        'titulo': 'Test',
+        'descripcion': 'Test',
+        'medio': Medio.CASETE.name,
+        'anio': 2020
+    }
+
+    crear_album_response = self.run_authenticated(user, 'post', f'/usuario/{user.id}/albumes', data=json.dumps(album_data))
+    album = crear_album_response.json
+
+    # Asignar canción al album
+    asignar_cancion_response = self.run_authenticated(user, 'post', f'/album/{album["id"]}/canciones', data=json.dumps({'id_cancion': cancion["id"]}))
+    
+    convertir_album_publico_response = self.run_authenticated(user, 'patch', f'/album/{album["id"]}', data=json.dumps({'acceso': "PUBLICO"}))
+
+    cambiar_acceso_cancion_response = self.run_authenticated(user, 'patch', f'/cancion/{cancion["id"]}', data=json.dumps({"acceso": "PUBLICO"}))
+    
+    # Assert    
+    self.assertEqual(crear_cancion_response.status_code, 200)            
+    self.assertEqual(crear_album_response.status_code, 200)            
+    self.assertEqual(convertir_album_publico_response.status_code, 204)            
+    self.assertEqual(cambiar_acceso_cancion_response.status_code, 204)            
 
 
 
