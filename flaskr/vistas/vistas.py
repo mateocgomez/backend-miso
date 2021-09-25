@@ -76,27 +76,32 @@ class VistaCancion(MethodResource, Resource):
         cancion = Cancion.query.get_or_404(id_cancion)
 
         id_usuario = get_jwt_identity()
-
-        belongAlbums = cancion.albumes
         
-        if belongAlbums:
-            isOwner = False
+        belongAlbums = cancion.albumes        
+        
+        if len(belongAlbums):
+            canChange = False
 
             for album in belongAlbums:
-                if album.usuario == id_usuario:
-                    isOwner = True       
+                if album.usuario == id_usuario:                    
+                    canChange = album.acceso == Acceso.PUBLICO
+                    break
+            
+            if canChange: 
+                acceso = request.json.get("acceso")
 
-            if not isOwner:
+                if not acceso in Acceso._member_names_:
+                    return { "mensajes": "{} no es parte de los valores disponibles de Acceso".format(acceso) }, 400
+
+                cancion.acceso = acceso
+                db.session.commit()
+                return '',204
+
+            else:
                 return {"mensaje": "No puede cambiar el acceso de la cancíón."}, 400
 
-        acceso = request.json.get("acceso")
-
-        if not acceso in Acceso._member_names_:
-            return { "mensajes": "{} no es parte de los valores disponibles de Acceso".format(acceso) }, 400
-
-        cancion.acceso = acceso
-        db.session.commit()
-        return '',204
+        else:
+            return {"mensaje": "No puede cambiar el acceso de la cancíón."}, 400
 
 
 @doc(description='Leer los albumes de una cancion', tags=['AlbumesCanciones'])

@@ -31,8 +31,7 @@ class TestCancion(BaseCase):
 
     # Assert
     self.assertEqual(cancion["acceso"]["valor"], 1)
-    self.assertEqual(cambiar_acceso_response.status_code, 204)        
-    self.assertEqual(cancion_nuevo_acceso["acceso"]["valor"], 2)
+    self.assertEqual(cambiar_acceso_response.status_code, 400)            
 
   def test_endpoint_patch_cancion_without_jwt(self):
     # Arrange
